@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>守护引擎 Pro - 战区监控大屏 (亮色版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        lightBg: '#f8fafc',    // slate-50
+                        lightPanel: '#ffffff', // white
+                        techBlue: '#3b82f6',
+                        dangerRed: '#ef4444',
+                        warningOrange: '#f59e0b',
+                        successGreen: '#10b981',
+                    },
+                    animation: {
+                        'breathe-red': 'breatheRed 2s ease-in-out infinite',
+                        'slide-in': 'slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                    },
+                    keyframes: {
+                        breatheRed: {
+                            '0%, 100%': { borderColor: '#ef4444', boxShadow: '0 0 15px rgba(239, 68, 68, 0.2)' },
+                            '50%': { borderColor: '#fca5a5', boxShadow: '0 0 5px rgba(239, 68, 68, 0.05)' },
+                        },
+                        slideIn: {
+                            '0%': { transform: 'translateX(100%)', opacity: '0' },
+                            '100%': { transform: 'translateX(0)', opacity: '1' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 定制浅色滚动条 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* AI 视觉层过渡效果 */
+        .ai-layer { transition: opacity 0.3s ease; }
+        .ai-layer.hidden-overlay { opacity: 0; pointer-events: none; }
+    </style>
+</head>
+<body class="bg-lightBg text-slate-800 h-screen w-screen overflow-hidden flex flex-col font-sans selection:bg-techBlue selection:text-white">
+
+    <header class="md:hidden h-14 bg-lightPanel border-b border-slate-200 flex items-center justify-between px-4 shadow-sm z-20">
+        <div class="font-bold text-lg flex items-center text-slate-800">
+            <span class="w-3 h-3 rounded-full bg-techBlue mr-2 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
+            守护引擎
+        </div>
+        <button class="p-2 text-slate-500 hover:text-techBlue"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg></button>
+    </header>
+
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        
+        <aside class="w-full md:w-64 bg-lightPanel border-r border-slate-200 flex flex-col hidden md:flex z-10 shrink-0 shadow-sm">
+            <div class="p-4 border-b border-slate-100">
+                <h2 class="text-sm font-bold text-slate-600 tracking-wider flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    设备管理树
+                </h2>
+            </div>
+            <div class="flex-1 overflow-y-auto p-3 space-y-4">
+                <div>
+                    <div class="text-xs font-semibold text-slate-400 mb-2 px-2 uppercase tracking-wide">大一班</div>
+                    <ul class="space-y-1">
+                        <li class="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer group transition-colors" onclick="focusCamera('cam-1')">
+                            <div class="flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-successGreen mr-2"></span>
+                                <span class="text-sm text-slate-600 group-hover:text-techBlue font-medium transition-colors">活动室 - 主摄</span>
+                            </div>
+                        </li>
+                        <li class="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer group transition-colors" onclick="focusCamera('cam-2')">
+                            <div class="flex items-center">
+                                <span id="dot-cam-2" class="w-2 h-2 rounded-full bg-dangerRed animate-pulse mr-2"></span>
+                                <span class="text-sm text-slate-600 group-hover:text-techBlue font-medium transition-colors">午睡区 - 全景</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-slate-400 mb-2 px-2 uppercase tracking-wide">公共区域</div>
+                    <ul class="space-y-1">
+                        <li class="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-50 cursor-pointer group">
+                            <div class="flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-slate-300 mr-2"></span>
+                                <span class="text-sm text-slate-400">室外操场 (离线)</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col bg-lightBg relative">
+            
+            <div id="videoGrid" class="flex-1 p-2 md:p-4 grid grid-cols-2 gap-2 md:gap-4 transition-all duration-300">
+                
+                <div id="cam-1" class="relative bg-slate-900 rounded-lg border border-slate-200 shadow-sm overflow-hidden group flex flex-col" ondblclick="toggleFullScreen(this)">
+                    <div class="absolute top-0 w-full bg-gradient-to-b from-black/70 to-transparent p-2 md:p-3 flex justify-between items-center z-20">
+                        <span class="text-xs md:text-sm font-medium text-white flex items-center drop-shadow-md">
+                            <span class="w-2 h-2 rounded-full bg-successGreen mr-2 shadow-[0_0_4px_#10b981]"></span> 活动室 - 主摄
+                        </span>
+                        <span class="text-[10px] md:text-xs text-successGreen font-mono bg-black/40 backdrop-blur-sm px-1.5 rounded border border-successGreen/30">FPS: 30 | 12ms</span>
+                    </div>
+                    <div class="flex-1 w-full h-full bg-[url('https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center opacity-90"></div>
+                    <div class="ai-layer absolute inset-0 z-10 pointer-events-none">
+                        <div class="absolute border border-successGreen bg-green-500/10 rounded" style="top: 40%; left: 30%; width: 20%; height: 45%;">
+                            <span class="absolute -top-5 left-[-1px] bg-successGreen text-white text-[9px] px-1 rounded font-mono shadow-sm">Teacher 98%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="cam-2" class="relative bg-slate-900 rounded-lg border-2 border-dangerRed shadow-[0_0_15px_rgba(239,68,68,0.2)] animate-breathe-red overflow-hidden group flex flex-col" ondblclick="toggleFullScreen(this)">
+                    <div class="absolute top-0 w-full bg-gradient-to-b from-black/70 to-transparent p-2 md:p-3 flex justify-between items-center z-20">
+                        <span class="text-xs md:text-sm font-bold text-dangerRed flex items-center drop-shadow-md bg-white/10 px-2 py-0.5 rounded backdrop-blur-sm">
+                            <span class="w-2 h-2 rounded-full bg-dangerRed animate-ping mr-2"></span> 午睡区 - 全景
+                        </span>
+                        <span class="text-[10px] md:text-xs text-dangerRed font-mono bg-black/40 backdrop-blur-sm px-1.5 rounded border border-dangerRed/30">FPS: 28 | 15ms</span>
+                    </div>
+                    <div class="flex-1 w-full h-full bg-[url('https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center opacity-90"></div>
+                    
+                    <div class="ai-layer absolute inset-0 z-10 pointer-events-none">
+                        <div class="absolute border border-warningOrange bg-warningOrange/20 backdrop-blur-[1px]" style="bottom: 0; right: 10%; width: 40%; height: 30%;">
+                            <span class="absolute top-1 left-1 text-warningOrange text-[9px] font-bold bg-white/80 px-1 rounded">电源禁区</span>
+                        </div>
+                        <div class="absolute border-2 border-dangerRed bg-red-500/20 rounded shadow-[0_0_8px_rgba(239,68,68,0.5)]" style="top: 30%; left: 50%; width: 25%; height: 50%;">
+                            <span class="absolute -top-5 left-[-2px] bg-dangerRed text-white text-[9px] px-1 rounded font-mono shadow-md">Climbing 94%</span>
+                            <svg class="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                <line x1="50" y1="20" x2="50" y2="50" stroke="#00ffcc" stroke-width="2"/>
+                                <line x1="50" y1="30" x2="20" y2="40" stroke="#00ffcc" stroke-width="2"/>
+                                <line x1="50" y1="30" x2="80" y2="40" stroke="#00ffcc" stroke-width="2"/>
+                                <circle cx="50" cy="15" r="4" fill="#00ffcc"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="relative bg-white rounded-lg border border-slate-200 shadow-sm flex items-center justify-center hidden md:flex">
+                    <div class="text-slate-400 text-sm flex flex-col items-center">
+                        <svg class="w-8 h-8 mb-2 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        等待接入
+                    </div>
+                </div>
+
+                <div class="relative bg-white rounded-lg border border-slate-200 shadow-sm flex items-center justify-center hidden md:flex">
+                    <div class="text-slate-400 text-sm flex flex-col items-center">
+                        <svg class="w-8 h-8 mb-2 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        等待接入
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="h-14 bg-lightPanel border-t border-slate-200 flex items-center justify-between px-4 z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.02)]">
+                <div class="flex items-center space-x-1 md:space-x-2 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                    <button onclick="setGrid(1)" class="p-1.5 text-slate-500 hover:text-techBlue hover:bg-white hover:shadow-sm rounded transition" title="1宫格">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" stroke-width="2"></rect></svg>
+                    </button>
+                    <button onclick="setGrid(2)" class="p-1.5 text-techBlue bg-white rounded transition shadow-sm border border-slate-200" title="4宫格">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm10 0a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2V4zM4 14a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zm10 0a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2v-4z"></path></svg>
+                    </button>
+                    <button onclick="setGrid(3)" class="p-1.5 text-slate-500 hover:text-techBlue hover:bg-white hover:shadow-sm rounded transition hidden md:block" title="9宫格">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h4v4H4zM10 4h4v4h-4zM16 4h4v4h-4zM4 10h4v4H4zM10 10h4v4h-4zM16 10h4v4h-4zM4 16h4v4H4zM10 16h4v4h-4zM16 16h4v4h-4z"></path></svg>
+                    </button>
+                </div>
+
+                <div class="flex items-center space-x-3 md:space-x-4">
+                    <label class="flex items-center cursor-pointer group">
+                        <div class="relative">
+                            <input type="checkbox" id="aiToggle" class="sr-only" checked onchange="toggleAI()">
+                            <div class="block bg-slate-300 w-10 h-6 rounded-full group-hover:bg-slate-400 transition"></div>
+                            <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform translate-x-4 bg-techBlue shadow-[0_1px_3px_rgba(0,0,0,0.3)]"></div>
+                        </div>
+                        <span class="ml-2 text-xs md:text-sm font-bold text-slate-700">AI 视觉增强</span>
+                    </label>
+                    <div class="w-px h-6 bg-slate-200 hidden md:block"></div>
+                    <button class="text-slate-400 hover:text-techBlue transition hidden md:block" title="截图">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    </button>
+                    <button onclick="simulateNewAlert()" class="bg-red-50 text-dangerRed border border-red-200 px-3 py-1.5 rounded text-xs font-bold hover:bg-dangerRed hover:text-white transition shadow-sm">
+                        模拟触发高危
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <aside class="w-full md:w-80 bg-lightPanel border-l border-slate-200 flex flex-col h-64 md:h-auto shrink-0 z-10 shadow-sm">
+            <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h2 class="text-sm font-bold text-slate-800 flex items-center">
+                    <svg class="w-4 h-4 mr-2 text-techBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    AI 实时事件流
+                </h2>
+                <span class="text-xs bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-500 font-mono">14:32:05</span>
+            </div>
+            
+            <div id="eventStream" class="flex-1 overflow-y-auto p-3 space-y-3 relative">
+                </div>
+        </aside>
+
+    </div>
+
+    <script>
+        // ----------------- 交互逻辑与业务模拟 -----------------
+
+        // 1. 多宫格切换逻辑
+        const videoGrid = document.getElementById('videoGrid');
+        let currentZoomedCell = null;
+
+        function setGrid(cols) {
+            if(currentZoomedCell) {
+                currentZoomedCell.classList.remove('col-span-full', 'row-span-full', 'z-50');
+                currentZoomedCell = null;
+            }
+
+            videoGrid.className = 'flex-1 p-2 md:p-4 grid gap-2 md:gap-4 transition-all duration-300';
+            
+            if (cols === 1) {
+                videoGrid.classList.add('grid-cols-1');
+                console.log("[系统流媒体] 切换为单画面，已向后端请求高码率主码流 (HD).");
+            } else if (cols === 2) {
+                videoGrid.classList.add('grid-cols-2');
+                console.log("[系统流媒体] 切换为 4 宫格，已自动降级为子码流 (SD).");
+            } else if (cols === 3) {
+                videoGrid.classList.add('grid-cols-3');
+                console.log("[系统流媒体] 切换为 9 宫格，已分配最低保证带宽.");
+            }
+        }
+
+        // 2. 双击聚焦放大逻辑
+        function toggleFullScreen(cell) {
+            if (currentZoomedCell === cell) {
+                cell.classList.remove('col-span-full', 'row-span-full', 'z-50');
+                currentZoomedCell = null;
+                console.log("[前端控制] 退出全屏，恢复多宫格视图。");
+            } else {
+                if (currentZoomedCell) {
+                    currentZoomedCell.classList.remove('col-span-full', 'row-span-full', 'z-50');
+                }
+                cell.classList.add('col-span-full', 'row-span-full', 'z-50');
+                currentZoomedCell = cell;
+                console.log("[前端控制] 画面双击放大，请求 HD 码流。");
+            }
+        }
+
+        // 3. 左侧设备树点击联动
+        function focusCamera(camId) {
+            const cell = document.getElementById(camId);
+            if(cell) {
+                cell.classList.add('ring-4', 'ring-techBlue/50', 'z-40');
+                setTimeout(() => cell.classList.remove('ring-4', 'ring-techBlue/50', 'z-40'), 500);
+            }
+        }
+
+        // 4. AI 视觉层 (Overlay) 开关
+        function toggleAI() {
+            const toggleInput = document.getElementById('aiToggle');
+            const dot = toggleInput.nextElementSibling.nextElementSibling;
+            const overlays = document.querySelectorAll('.ai-layer');
+
+            if (toggleInput.checked) {
+                dot.classList.add('translate-x-4', 'bg-techBlue');
+                dot.classList.remove('bg-white');
+                toggleInput.nextElementSibling.classList.remove('bg-slate-300');
+                overlays.forEach(el => el.classList.remove('hidden-overlay'));
+                console.log("[AI 推理] 视觉增强层开启，开始接收 Canvas 坐标数据。");
+            } else {
+                dot.classList.remove('translate-x-4', 'bg-techBlue');
+                dot.classList.add('bg-white');
+                overlays.forEach(el => el.classList.add('hidden-overlay'));
+                console.log("[AI 推理] 视觉增强层关闭，停止前端 Canvas 渲染以节省性能。");
+            }
+        }
+
+        // 5. 右侧事件流水线模拟
+        const eventStream = document.getElementById('eventStream');
+        
+        function addEventCard(level, title, desc, time) {
+            const isHigh = level === 'high';
+            const cardBg = isHigh ? 'bg-red-50 border-red-200 hover:border-red-300' : 'bg-orange-50 border-orange-200 hover:border-orange-300';
+            const badgeClass = isHigh ? 'bg-dangerRed text-white' : 'bg-warningOrange text-white';
+            const titleClass = isHigh ? 'text-dangerRed' : 'text-warningOrange';
+
+            const cardHTML = `
+                <div class="border rounded-lg p-3 transition shadow-sm cursor-pointer animate-slide-in group ${cardBg}" onclick="focusCamera('cam-2')">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[10px] ${badgeClass} px-1.5 py-0.5 rounded font-bold uppercase tracking-wider shadow-sm">${isHigh ? '高危' : '警告'}</span>
+                            <span class="text-xs text-slate-500 font-mono">${time}</span>
+                        </div>
+                    </div>
+                    <p class="text-sm font-bold ${titleClass} mb-1">${title}</p>
+                    <p class="text-xs text-slate-600 mb-3 leading-relaxed">${desc}</p>
+                    
+                    <div class="flex space-x-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button class="flex-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs py-1.5 rounded transition shadow-sm" onclick="event.stopPropagation(); alert('误报已标记，截取视频上传后端样本库。')">确认安全 (误报)</button>
+                        ${isHigh ? `<button class="flex-1 bg-dangerRed hover:bg-red-600 text-white text-xs py-1.5 rounded shadow-sm transition" onclick="event.stopPropagation(); alert('已触发园所警报！')">立即干预</button>` : ''}
+                    </div>
+                </div>
+            `;
+            
+            eventStream.insertAdjacentHTML('afterbegin', cardHTML);
+        }
+
+        // 初始加载一条数据
+        window.onload = () => {
+            addEventCard('high', '检测到 [攀爬行为]', '午睡区 - 可能性 94%。行为轨迹触及电源禁区。', '14:30:12');
+        };
+
+        // 模拟触发新高危事件
+        function simulateNewAlert() {
+            const now = new Date();
+            const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            
+            addEventCard('high', '检测到 [异常跌倒]', '活动室 - 可能性 98%。人员骨架姿态剧烈变化。', timeStr);
+            
+            const dot = document.getElementById('dot-cam-2');
+            dot.classList.remove('bg-dangerRed');
+            void dot.offsetWidth;
+            dot.classList.add('bg-dangerRed');
+
+            console.log(`[WebSocket 推送] 收到紧急事件 (跌倒), 时间: ${timeStr}`);
+        }
+
+    </script>
+</body>
+</html>

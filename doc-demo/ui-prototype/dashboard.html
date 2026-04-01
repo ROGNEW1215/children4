@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时安全监控大屏</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        techBlue: '#2563EB',
+                        dangerRed: '#EF4444',
+                        successGreen: '#10B981',
+                        bgLight: '#f5f7fa'
+                    },
+                    animation: {
+                        'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 隐藏滚动条 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-bgLight text-gray-800 h-screen flex overflow-hidden font-sans">
+
+    <aside class="w-64 bg-white shadow-lg hidden md:flex flex-col z-20">
+        <div class="h-16 flex items-center px-6 border-b border-gray-100">
+            <div class="w-8 h-8 bg-techBlue rounded-lg flex items-center justify-center mr-3 shadow-md shadow-blue-200">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+            </div>
+            <span class="font-bold text-lg tracking-tight">守护引擎 Pro</span>
+        </div>
+        <nav class="flex-1 px-4 py-6 space-y-2">
+            <a href="#" class="flex items-center px-4 py-3 bg-blue-50 text-techBlue rounded-xl font-medium transition-colors">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                实时概览
+            </a>
+            <a href="#" class="flex items-center px-4 py-3 text-gray-500 hover:bg-gray-50 rounded-xl font-medium transition-colors">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                监控回放
+            </a>
+        </nav>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full relative">
+        <header class="h-16 bg-white/80 backdrop-blur-md shadow-sm flex items-center justify-between px-6 z-10">
+            <div class="flex items-center md:hidden">
+                <span class="font-bold text-lg text-techBlue">守护引擎</span>
+            </div>
+            <div class="hidden md:flex items-center text-sm text-gray-500">
+                <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-successGreen mr-2"></span> 系统运行正常</span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <select id="roleSelector" onchange="switchRole()" class="text-sm border-gray-200 rounded-lg focus:ring-techBlue bg-gray-50 py-1.5 px-3 outline-none cursor-pointer">
+                    <option value="institution">机构管理员 (全局)</option>
+                    <option value="parent">家长 (单点监控)</option>
+                </select>
+                <button onclick="triggerEmergencyAlert()" class="text-xs bg-red-100 text-dangerRed px-3 py-1.5 rounded-lg hover:bg-red-200 font-medium transition-colors">
+                    模拟高危触发
+                </button>
+            </div>
+        </header>
+
+        <div id="toastAlert" class="absolute top-20 right-6 bg-dangerRed text-white px-6 py-4 rounded-xl shadow-2xl shadow-red-500/40 transform translate-x-full opacity-0 transition-all duration-300 z-50 flex items-center">
+            <svg class="w-6 h-6 mr-3 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <div>
+                <h4 class="font-bold text-sm">高危预警拦截！</h4>
+                <p id="toastMsg" class="text-xs text-red-100 mt-0.5">检测到幼儿尝试攀爬窗台</p>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 md:p-6 pb-20">
+            
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6">
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow" onclick="filterLogs('all')">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs text-gray-500 font-medium mb-1">今日预警总数</p>
+                            <h3 id="kpi-warnings" class="text-2xl md:text-3xl font-bold text-gray-800">128</h3>
+                        </div>
+                        <div class="p-2 bg-red-50 rounded-lg"><svg class="w-5 h-5 text-dangerRed" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg></div>
+                    </div>
+                    <div class="mt-4 flex items-center text-xs">
+                        <span class="text-successGreen flex items-center font-medium"><svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>15%</span>
+                        <span class="text-gray-400 ml-2">较昨日</span>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs text-gray-500 font-medium mb-1">设备在线率</p>
+                            <h3 id="kpi-devices" class="text-2xl md:text-3xl font-bold text-gray-800">42/45</h3>
+                        </div>
+                        <div class="p-2 bg-green-50 rounded-lg"><svg class="w-5 h-5 text-successGreen" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></div>
+                    </div>
+                    <div class="mt-4 flex items-center text-xs">
+                        <span class="text-gray-500">3台设备离线检修中</span>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs text-gray-500 font-medium mb-1">危险高发区域</p>
+                            <h3 id="kpi-area" class="text-xl md:text-2xl font-bold text-gray-800 mt-1">二楼活动室</h3>
+                        </div>
+                        <div class="p-2 bg-orange-50 rounded-lg"><svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></div>
+                    </div>
+                    <div class="mt-3 flex items-center text-xs">
+                        <span class="text-orange-500 bg-orange-50 px-2 py-1 rounded">集中在午休时段</span>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs text-gray-500 font-medium mb-1">系统健康度</p>
+                            <h3 class="text-2xl md:text-3xl font-bold text-gray-800">12<span class="text-sm font-normal text-gray-500 ml-1">ms</span></h3>
+                        </div>
+                        <div class="p-2 bg-blue-50 rounded-lg"><svg class="w-5 h-5 text-techBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
+                    </div>
+                    <div class="mt-4 flex items-center text-xs">
+                        <span class="text-gray-500">YOLOv11 推理延迟极低</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div class="lg:col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                    <h3 class="text-sm font-bold text-gray-800 mb-4 flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-techBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                        24小时安全趋势
+                    </h3>
+                    <div class="h-64 relative w-full">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col">
+                    <h3 class="text-sm font-bold text-gray-800 mb-4 flex items-center justify-between">
+                        <span class="flex items-center">
+                            <svg class="w-4 h-4 mr-2 text-dangerRed" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            实时监控快照
+                        </span>
+                        <span class="flex h-2 w-2 relative">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-dangerRed opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-dangerRed"></span>
+                        </span>
+                    </h3>
+                    <div id="cameraSnapshot" class="flex-1 bg-gray-900 rounded-xl relative overflow-hidden group transition-all duration-300 border-2 border-transparent min-h-[200px]">
+                        <div class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1595123550441-d377e017ea6c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80')] bg-cover bg-center opacity-60"></div>
+                        
+                        <div id="aiBoundingBox" class="absolute border-2 border-successGreen bg-green-500/20 rounded transition-all duration-500" style="top: 30%; left: 40%; width: 25%; height: 45%;">
+                            <span id="aiLabel" class="absolute -top-6 left-[-2px] bg-successGreen text-white text-[10px] px-2 py-0.5 rounded font-mono">Person 98%</span>
+                        </div>
+                        <div class="absolute bottom-3 right-3 text-white/80 text-xs font-mono bg-black/50 px-2 py-1 rounded">
+                            CAM_03 - <span id="clock">14:32:05</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                    <h3 class="text-sm font-bold text-gray-800 mb-4">行为类型分布 (点击分类过滤日志)</h3>
+                    <div class="h-56 relative w-full flex items-center justify-center">
+                        <canvas id="pieChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col">
+                    <h3 class="text-sm font-bold text-gray-800 mb-4 flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+                        异常事件滚动播报
+                    </h3>
+                    <div class="flex-1 overflow-y-auto pr-2 relative" id="logContainer">
+                        <div class="absolute top-0 left-0 w-full h-4 bg-gradient-to-b from-white to-transparent z-10 pointer-events-none"></div>
+                        
+                        <div id="logList" class="space-y-4 pt-2">
+                            </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // --- 1. 图表初始化 (Chart.js) ---
+        Chart.defaults.font.family = 'sans-serif';
+        Chart.defaults.color = '#64748b';
+
+        // 趋势折线图
+        const ctxTrend = document.getElementById('trendChart').getContext('2d');
+        const trendGradient = ctxTrend.createLinearGradient(0, 0, 0, 300);
+        trendGradient.addColorStop(0, 'rgba(37, 99, 235, 0.2)'); // techBlue 透明
+        trendGradient.addColorStop(1, 'rgba(37, 99, 235, 0)');
+
+        let trendChart = new Chart(ctxTrend, {
+            type: 'line',
+            data: {
+                labels: ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
+                datasets: [{
+                    label: '预警频次',
+                    data: [12, 19, 8, 45, 22, 5],
+                    borderColor: '#2563EB',
+                    backgroundColor: trendGradient,
+                    borderWidth: 2,
+                    tension: 0.4, // 平滑曲线
+                    fill: true,
+                    pointBackgroundColor: '#ffffff',
+                    pointBorderColor: '#2563EB',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        padding: 10,
+                        cornerRadius: 8,
+                        displayColors: false,
+                        callbacks: { label: (context) => `发生预警: ${context.raw} 次` }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { borderDash: [4, 4], color: '#f1f5f9' }, border: {display: false} },
+                    x: { grid: { display: false }, border: {display: false} }
+                }
+            }
+        });
+
+        // 行为分布环形图
+        const ctxPie = document.getElementById('pieChart').getContext('2d');
+        let pieChart = new Chart(ctxPie, {
+            type: 'doughnut',
+            data: {
+                labels: ['攀爬高处', '异常跌倒', '接近危险区', '肢体冲突'],
+                datasets: [{
+                    data: [45, 25, 20, 10],
+                    backgroundColor: ['#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6'],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: { position: 'right', labels: { boxWidth: 10, usePointStyle: true, padding: 15 } },
+                    tooltip: {
+                        callbacks: { label: (context) => ` ${context.label}: ${context.raw}%` }
+                    }
+                },
+                onClick: (event, elements) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        const label = pieChart.data.labels[index];
+                        filterLogs(label); // 饼图联动下方的日志
+                    } else {
+                        filterLogs('all');
+                    }
+                }
+            }
+        });
+
+        // --- 2. 模拟 WebSocket 与动态日志列表 ---
+        const logList = document.getElementById('logList');
+        const logs = [
+            { time: '14:32:05', level: 'high', type: '攀爬高处', loc: '二楼活动室', msg: '幼儿 A 尝试攀爬储物柜' },
+            { time: '14:15:22', level: 'medium', type: '接近危险区', loc: '茶水间外', msg: '人员在开水间门口徘徊' },
+            { time: '13:50:11', level: 'high', type: '异常跌倒', loc: '室外操场', msg: '检测到人员快速倒地' },
+            { time: '12:30:00', level: 'low', type: '常规监控', loc: '午休室', msg: '画面正常，无异常行为' }
+        ];
+
+        function renderLogs(filterType = 'all') {
+            logList.innerHTML = '';
+            const filteredLogs = filterType === 'all' ? logs : logs.filter(l => l.type === filterType);
+            
+            filteredLogs.forEach((log, index) => {
+                const colorMap = { 'high': 'text-dangerRed bg-red-50', 'medium': 'text-orange-500 bg-orange-50', 'low': 'text-successGreen bg-green-50' };
+                const badgeClass = colorMap[log.level];
+                
+                const html = `
+                    <div class="flex items-start group transform transition-transform duration-300 hover:translate-x-1" style="animation: slideIn 0.3s ease-out ${index * 0.1}s both;">
+                        <div class="flex-shrink-0 w-16 text-xs text-gray-400 font-mono pt-1">${log.time}</div>
+                        <div class="relative flex-1 border-l-2 border-gray-100 pl-4 pb-4">
+                            <div class="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full ${log.level === 'high' ? 'bg-dangerRed' : (log.level === 'medium' ? 'bg-orange-400' : 'bg-successGreen')} ring-4 ring-white"></div>
+                            <div class="bg-gray-50 rounded-lg p-3 group-hover:bg-blue-50/50 transition-colors">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-xs font-bold ${badgeClass} px-2 py-0.5 rounded">${log.type}</span>
+                                    <span class="text-xs text-gray-500 flex items-center">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                        ${log.loc}
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-700">${log.msg}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                logList.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        function filterLogs(type) {
+            renderLogs(type);
+        }
+
+        // --- 3. 动态预警强插 (核心交互) ---
+        function triggerEmergencyAlert() {
+            // 1. 弹出 Toast
+            const toast = document.getElementById('toastAlert');
+            const now = new Date().toLocaleTimeString('en-US', { hour12: false });
+            document.getElementById('toastMsg').textContent = `检测到高危：幼儿攀爬窗台 (${now})`;
+            
+            toast.classList.remove('translate-x-full', 'opacity-0');
+            
+            // 2. 锁定监控快照，加入红光呼吸特效
+            const snap = document.getElementById('cameraSnapshot');
+            snap.classList.add('border-dangerRed', 'shadow-[0_0_20px_rgba(239,68,68,0.5)]');
+            
+            const bbox = document.getElementById('aiBoundingBox');
+            bbox.className = "absolute border-2 border-dangerRed bg-red-500/20 rounded transition-all duration-200 animate-pulse-fast";
+            bbox.style.top = '10%'; bbox.style.left = '60%'; bbox.style.width = '30%'; bbox.style.height = '60%'; // 移动框位
+            
+            const label = document.getElementById('aiLabel');
+            label.className = "absolute -top-6 left-[-2px] bg-dangerRed text-white text-[10px] px-2 py-0.5 rounded font-mono animate-pulse";
+            label.textContent = "DANGER: Climbing 99%";
+
+            // 3. 强插一条日志到顶部
+            logs.unshift({ time: now, level: 'high', type: '攀爬高处', loc: '午休室窗边', msg: '紧急！监控锁定：幼儿试图攀爬窗台' });
+            renderLogs();
+
+            // 4 秒后恢复
+            setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+                snap.classList.remove('border-dangerRed', 'shadow-[0_0_20px_rgba(239,68,68,0.5)]');
+                
+                bbox.className = "absolute border-2 border-successGreen bg-green-500/20 rounded transition-all duration-500";
+                bbox.style.top = '30%'; bbox.style.left = '40%'; bbox.style.width = '25%'; bbox.style.height = '45%';
+                label.className = "absolute -top-6 left-[-2px] bg-successGreen text-white text-[10px] px-2 py-0.5 rounded font-mono";
+                label.textContent = "Person 98%";
+            }, 4000);
+        }
+
+        // --- 4. 角色数据隔离 (RBAC 模拟) ---
+        function switchRole() {
+            const role = document.getElementById('roleSelector').value;
+            if (role === 'parent') {
+                // 家长端数据缩减
+                document.getElementById('kpi-warnings').textContent = '2';
+                document.getElementById('kpi-devices').textContent = '1/1';
+                document.getElementById('kpi-area').textContent = '客厅';
+                trendChart.data.datasets[0].data = [0, 1, 0, 2, 0, 0];
+                pieChart.data.datasets[0].data = [80, 20, 0, 0]; // 仅显示特定家庭情况
+            } else {
+                // 机构端全量数据
+                document.getElementById('kpi-warnings').textContent = '128';
+                document.getElementById('kpi-devices').textContent = '42/45';
+                document.getElementById('kpi-area').textContent = '二楼活动室';
+                trendChart.data.datasets[0].data = [12, 19, 8, 45, 22, 5];
+                pieChart.data.datasets[0].data = [45, 25, 20, 10];
+            }
+            trendChart.update();
+            pieChart.update();
+        }
+
+        // 初始化
+        renderLogs();
+        // 时钟水印更新
+        setInterval(() => {
+            document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+        }, 1000);
+
+    </script>
+    <style>
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</body>
+</html>

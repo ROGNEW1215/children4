@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>守护引擎 - 数据隐私与权限控制</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        techBlue: '#2563EB',
+                        successGreen: '#10B981',
+                        dangerRed: '#EF4444',
+                        warningOrange: '#F59E0B',
+                        bgLight: '#f0f2f5', // 极浅蓝灰背景
+                        panelWhite: '#ffffff',
+                    },
+                    boxShadow: {
+                        'float': '0 4px 20px rgba(0,0,0,0.04)',
+                        'drawer': '-10px 0 30px rgba(0,0,0,0.05)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* 抽屉与模态框动画 */
+        .drawer-open { transform: translateX(0) !important; }
+        .modal-open { opacity: 1 !important; pointer-events: auto !important; }
+        .modal-content-open { transform: scale(1) translateY(0) !important; opacity: 1 !important; }
+        
+        /* 模拟红外热成像滤镜 */
+        .thermal-filter {
+            filter: grayscale(100%) sepia(100%) hue-rotate(270deg) saturate(600%) contrast(150%) invert(10%);
+        }
+        
+        /* 物理防拆全局锁定状态 */
+        .lockdown-mode {
+            pointer-events: none;
+            opacity: 0.6;
+            filter: grayscale(80%);
+        }
+    </style>
+</head>
+<body class="bg-bgLight text-gray-800 h-screen flex overflow-hidden font-sans">
+
+    <aside class="w-64 bg-panelWhite shadow-md z-20 hidden md:flex flex-col shrink-0 border-r border-gray-100">
+        <div class="h-16 flex items-center px-6 border-b border-gray-50">
+            <div class="w-8 h-8 bg-techBlue rounded-lg flex items-center justify-center mr-3 shadow-md shadow-blue-200">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+            </div>
+            <span class="font-bold text-lg tracking-tight">守护引擎 Pro</span>
+        </div>
+        <nav class="flex-1 px-4 py-6 space-y-2">
+            <a href="#" class="flex items-center px-4 py-3 text-gray-500 hover:bg-gray-50 rounded-xl font-medium transition">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2z"></path></svg> 实时概览
+            </a>
+            <a href="#" class="flex items-center px-4 py-3 bg-blue-50 text-techBlue rounded-xl font-medium transition shadow-sm">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg> 安全与权限
+            </a>
+        </nav>
+        <div class="p-4 border-t border-gray-50">
+            <button onclick="triggerLockdown()" class="w-full bg-red-50 text-dangerRed border border-red-100 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-100 transition flex items-center justify-center">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                模拟防拆告警
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 overflow-y-auto relative">
+        
+        <header class="md:hidden h-14 bg-panelWhite shadow-sm flex items-center px-4 shrink-0 z-20">
+            <h1 class="font-bold text-lg text-gray-800">安全与权限控制</h1>
+        </header>
+
+        <div class="p-4 md:p-8 max-w-6xl mx-auto space-y-6" id="main-workspace">
+            
+            <div class="flex justify-between items-end mb-2 hidden md:flex">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">数据隐私与权限控制</h1>
+                    <p class="text-sm text-gray-500 mt-1">全局合规策略、边缘脱敏配置与访问审批流</p>
+                </div>
+                <div id="global-status" class="bg-successGreen/10 text-successGreen border border-successGreen/20 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center shadow-sm">
+                    <span class="w-2 h-2 rounded-full bg-successGreen mr-2 animate-pulse"></span> 系统安全运行中
+                </div>
+            </div>
+
+            <div id="lockdown-banner" class="hidden bg-dangerRed text-white p-4 rounded-xl shadow-lg flex items-center justify-between animate-[pulse_2s_ease-in-out_infinite]">
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    <div>
+                        <h3 class="font-bold">物理防拆联动已触发：隐私保护强制升至最高级</h3>
+                        <p class="text-xs text-red-100 mt-0.5">边缘节点已切断所有外网视频流访问，系统处于锁定状态。</p>
+                    </div>
+                </div>
+                <button onclick="releaseLockdown()" class="bg-white text-dangerRed px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-gray-50 transition">
+                    解除锁定
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <section class="bg-panelWhite rounded-2xl p-6 shadow-float border border-gray-100">
+                    <div class="flex items-center mb-6">
+                        <div class="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center mr-3">
+                            <svg class="w-5 h-5 text-techBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold text-gray-800">全局脱敏控制</h2>
+                            <p class="text-xs text-gray-500">当前级别：<span id="privacy-level" class="text-warningOrange font-bold">部分遮挡</span></p>
+                        </div>
+                    </div>
+
+                    <div class="w-full h-40 bg-gray-900 rounded-xl mb-6 overflow-hidden relative shadow-inner group border border-gray-200">
+                        <img id="preview-img" src="https://images.unsplash.com/photo-1595123550441-d377e017ea6c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="监控预览" class="w-full h-full object-cover transition-all duration-700 ease-in-out">
+                        <div id="blur-layer" class="absolute inset-0 z-10 hidden">
+                            <div class="absolute top-1/4 left-1/3 w-16 h-16 backdrop-blur-md bg-white/10 rounded-full border border-white/20"></div>
+                            <div class="absolute top-1/3 right-1/4 w-12 h-12 backdrop-blur-md bg-white/10 rounded-full border border-white/20"></div>
+                        </div>
+                        <div class="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-1 rounded backdrop-blur-sm">边缘节点渲染预览</div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="flex items-start justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                            <div class="pr-4">
+                                <h3 class="text-sm font-bold text-gray-800 mb-1">全局红外热成像模式</h3>
+                                <p class="text-xs text-gray-500 leading-relaxed">开启后，前端视频流不再传输实景，仅显示 AI 提取的人体热力轮廓。大幅提升隐私级别，但可能影响人工对环境细节的判断。</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                                <input type="checkbox" id="thermal-toggle" class="sr-only peer" onchange="toggleThermal()">
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-techBlue"></div>
+                            </label>
+                        </div>
+
+                        <div class="flex items-start justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                            <div class="pr-4">
+                                <h3 class="text-sm font-bold text-gray-800 mb-1">AI 实时人脸打码</h3>
+                                <p class="text-xs text-gray-500 leading-relaxed">利用 YOLOv11 引擎，在视频流推流前对儿童面部及特定敏感区域进行高斯模糊处理。</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                                <input type="checkbox" id="blur-toggle" class="sr-only peer" checked onchange="toggleBlur()">
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-techBlue"></div>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="bg-panelWhite rounded-2xl p-6 shadow-float border border-gray-100 flex flex-col">
+                    <div class="flex items-center mb-6">
+                        <div class="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center mr-3">
+                            <svg class="w-5 h-5 text-warningOrange" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                        <h2 class="text-lg font-bold text-gray-800">数据生命周期与合规</h2>
+                    </div>
+
+                    <div class="flex-1 space-y-6">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-800 mb-2">实时监控流本地缓存</label>
+                            <select class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-techBlue focus:border-techBlue block p-2.5 outline-none cursor-pointer">
+                                <option value="24">覆盖周期：24小时 (极低存储)</option>
+                                <option value="48" selected>覆盖周期：48小时 (推荐标准)</option>
+                                <option value="168">覆盖周期：7天 (需挂载扩展盘)</option>
+                            </select>
+                            <p class="text-[10px] text-gray-500 mt-2">常规无异常视频流将按照此周期进行滚动擦除。</p>
+                        </div>
+
+                        <div class="pt-4 border-t border-gray-100">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="block text-sm font-bold text-gray-800">高危报警视频固化周期</label>
+                                <span id="retention-val" class="text-techBlue font-mono font-bold text-sm">180 天</span>
+                            </div>
+                            <input type="range" id="retention-slider" min="30" max="365" value="180" step="30" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-techBlue" onchange="handleSliderChange(this)">
+                            <div class="flex justify-between text-[10px] text-gray-400 mt-1 font-mono">
+                                <span>30D</span>
+                                <span>180D (合规)</span>
+                                <span>365D</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">法规建议涉及未成年人的事故切片应至少保留 180 天。</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 bg-red-50 border border-red-100 p-4 rounded-xl flex items-start">
+                        <svg class="w-5 h-5 text-dangerRed mr-2 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        <p class="text-xs text-dangerRed font-medium leading-relaxed">系统已开启底层磁盘覆写模式。超期数据将执行不可恢复的 DoD 5220.22-M 标准物理粉碎，确保无痕销毁。</p>
+                    </div>
+                </section>
+            </div>
+
+            <section class="bg-panelWhite rounded-2xl p-6 shadow-float border border-gray-100 mt-6">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center mr-3">
+                            <svg class="w-5 h-5 text-successGreen" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold text-gray-800">远程访问审批流</h2>
+                            <p class="text-xs text-gray-500">WebSocket 秒级下发，实时阻断</p>
+                        </div>
+                    </div>
+                    <button class="text-sm text-gray-500 hover:text-gray-800 transition flex items-center bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg> 黑白名单管理
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-gray-600 min-w-[800px]">
+                        <thead class="bg-gray-50 text-gray-500 text-xs border-y border-gray-100">
+                            <tr>
+                                <th class="px-4 py-3 font-medium">申请人 (点击看历史)</th>
+                                <th class="px-4 py-3 font-medium">关联儿童</th>
+                                <th class="px-4 py-3 font-medium">权限范围</th>
+                                <th class="px-4 py-3 font-medium w-1/3">申请理由</th>
+                                <th class="px-4 py-3 font-medium text-right">审批操作</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-50" id="approval-list">
+                            <tr class="hover:bg-gray-50/50 transition group" id="req-1">
+                                <td class="px-4 py-3 flex items-center cursor-pointer" onclick="openDrawer('user_wang')">
+                                    <img src="https://ui-avatars.com/api/?name=王&background=EBF4FF&color=2563EB" class="w-8 h-8 rounded-full mr-3 shadow-sm group-hover:ring-2 ring-techBlue/30 transition">
+                                    <span class="font-bold text-gray-800">王爸爸</span>
+                                </td>
+                                <td class="px-4 py-3 text-gray-700">大二班 - 王小明</td>
+                                <td class="px-4 py-3">
+                                    <span class="bg-blue-50 text-techBlue text-[10px] px-2 py-0.5 rounded font-medium border border-blue-100">实时视频 + 日志</span>
+                                </td>
+                                <td class="px-4 py-3 text-xs text-gray-500 truncate max-w-[200px]" title="孩子今天感冒刚来园区，想偶尔看一下午休情况。">孩子今天感冒刚来园区，想偶尔看一下午休情况。</td>
+                                <td class="px-4 py-3 text-right space-x-2">
+                                    <button onclick="approve('req-1')" class="bg-techBlue text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-blue-700 transition shadow-sm">同意</button>
+                                    <button onclick="openRejectModal('req-1', '王爸爸')" class="bg-white text-gray-600 border border-gray-200 px-3 py-1.5 rounded text-xs font-medium hover:bg-red-50 hover:text-dangerRed transition">拒绝</button>
+                                </td>
+                            </tr>
+                            
+                            <tr class="hover:bg-gray-50/50 transition group" id="req-2">
+                                <td class="px-4 py-3 flex items-center cursor-pointer" onclick="openDrawer('user_li')">
+                                    <img src="https://ui-avatars.com/api/?name=李&background=F3F4F6&color=4B5563" class="w-8 h-8 rounded-full mr-3 shadow-sm group-hover:ring-2 ring-gray-300 transition">
+                                    <span class="font-bold text-gray-800">李妈妈</span>
+                                </td>
+                                <td class="px-4 py-3 text-gray-700">小一班 - 李小华</td>
+                                <td class="px-4 py-3">
+                                    <span class="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded font-medium border border-gray-200">仅日志推送</span>
+                                </td>
+                                <td class="px-4 py-3 text-xs text-gray-500 truncate max-w-[200px]">申请接收每日异常越界行为推送。</td>
+                                <td class="px-4 py-3 text-right space-x-2">
+                                    <button onclick="approve('req-2')" class="bg-techBlue text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-blue-700 transition shadow-sm">同意</button>
+                                    <button onclick="openRejectModal('req-2', '李妈妈')" class="bg-white text-gray-600 border border-gray-200 px-3 py-1.5 rounded text-xs font-medium hover:bg-red-50 hover:text-dangerRed transition">拒绝</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div id="drawerBackdrop" onclick="closeDrawer()" class="fixed inset-0 bg-gray-900/20 backdrop-blur-[2px] z-40 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+    <div id="historyDrawer" class="fixed inset-y-0 right-0 w-full md:w-96 bg-panelWhite shadow-drawer transform translate-x-full transition-transform duration-300 z-50 flex flex-col border-l border-gray-100">
+        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <h2 class="text-base font-bold text-gray-800 flex items-center">
+                <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                历史访问审计
+            </h2>
+            <button onclick="closeDrawer()" class="p-1.5 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full transition"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        
+        <div class="p-5 flex items-center border-b border-gray-50">
+            <img src="https://ui-avatars.com/api/?name=王&background=EBF4FF&color=2563EB" id="drawer-avatar" class="w-12 h-12 rounded-full mr-4 shadow-sm">
+            <div>
+                <p class="font-bold text-gray-800 text-lg" id="drawer-name">王爸爸</p>
+                <p class="text-xs text-gray-500 font-mono">区块链 ID: 0x8F2a...3C91</p>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-5 space-y-4">
+            <div class="relative pl-4 border-l-2 border-gray-100 space-y-6">
+                <div class="relative">
+                    <span class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-successGreen ring-4 ring-white"></span>
+                    <p class="text-xs text-gray-400 font-mono mb-0.5">2026-03-28 14:00:22</p>
+                    <p class="text-sm text-gray-800 bg-gray-50 p-2 rounded-lg border border-gray-100">获取了【大二班主摄】的 10 分钟实时查看流。已正常结束。</p>
+                </div>
+                <div class="relative">
+                    <span class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-gray-300 ring-4 ring-white"></span>
+                    <p class="text-xs text-gray-400 font-mono mb-0.5">2026-03-25 09:15:00</p>
+                    <p class="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100">权限到期自动回收，WebSocket 断连。</p>
+                </div>
+                <div class="relative">
+                    <span class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-techBlue ring-4 ring-white"></span>
+                    <p class="text-xs text-gray-400 font-mono mb-0.5">2026-03-24 08:30:00</p>
+                    <p class="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100">系统管理员审批通过了视频查阅权限。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-4 border-t border-gray-100 bg-gray-50">
+            <button class="w-full bg-white border border-red-200 text-dangerRed py-2.5 rounded-lg text-sm font-bold hover:bg-red-50 transition shadow-sm">
+                强制吊销所有权限并加入黑名单
+            </button>
+        </div>
+    </div>
+
+    <div id="rejectModal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm transform scale-95 translate-y-4 transition-all duration-300 p-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">拒绝权限申请</h3>
+            <p class="text-xs text-gray-500 mb-4">正在回绝 <span id="reject-user-name" class="font-bold text-gray-700"></span> 的申请，请填写理由（将推送至家长端）。</p>
+            
+            <textarea id="reject-reason" rows="3" class="w-full border border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-techBlue outline-none resize-none mb-4" placeholder="例如：园区规定午休期间暂不开放实时视频，以免打扰..."></textarea>
+            
+            <div class="flex gap-3">
+                <button onclick="closeModal('rejectModal')" class="flex-1 bg-gray-100 text-gray-600 py-2 rounded-lg font-medium hover:bg-gray-200 transition text-sm">取消</button>
+                <button onclick="confirmReject()" class="flex-1 bg-dangerRed text-white py-2 rounded-lg font-medium hover:bg-red-700 transition shadow-md shadow-red-500/20 text-sm">确认回绝</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="dangerModal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm transform scale-95 translate-y-4 transition-all duration-300 p-6 border-t-4 border-dangerRed">
+            <div class="w-12 h-12 bg-red-100 text-dangerRed rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h3 class="text-center text-lg font-bold text-gray-800 mb-2">降低安全等级确认</h3>
+            <p class="text-center text-xs text-gray-500 mb-6" id="danger-msg">缩短固化周期将导致历史数据被物理粉碎覆盖，可能违反合规审查要求。</p>
+            <div class="flex gap-3">
+                <button onclick="cancelDangerAction()" class="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-lg font-bold hover:bg-gray-200 transition text-sm">放弃更改</button>
+                <button onclick="closeModal('dangerModal')" class="flex-1 bg-white border border-dangerRed text-dangerRed py-2.5 rounded-lg font-bold hover:bg-red-50 transition text-sm">执意修改</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed top-10 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center space-y-2 pointer-events-none"></div>
+
+    <script>
+        // --- A. 脱敏控制逻辑 ---
+        const thermalToggle = document.getElementById('thermal-toggle');
+        const blurToggle = document.getElementById('blur-toggle');
+        const previewImg = document.getElementById('preview-img');
+        const blurLayer = document.getElementById('blur-layer');
+        const privacyLevelLabel = document.getElementById('privacy-level');
+
+        function updatePrivacyStatus() {
+            if (thermalToggle.checked) {
+                privacyLevelLabel.textContent = '最高级 (红外替代)';
+                privacyLevelLabel.className = 'text-dangerRed font-bold';
+            } else if (blurToggle.checked) {
+                privacyLevelLabel.textContent = '部分遮挡 (人脸打码)';
+                privacyLevelLabel.className = 'text-warningOrange font-bold';
+            } else {
+                privacyLevelLabel.textContent = '全透传 (无保护)';
+                privacyLevelLabel.className = 'text-gray-500 font-bold';
+            }
+        }
+
+        function toggleThermal() {
+            if (thermalToggle.checked) {
+                // 开启红外，强制覆盖打码状态
+                previewImg.classList.add('thermal-filter');
+                blurLayer.classList.add('hidden');
+                blurToggle.disabled = true;
+                showToast('已开启全局红外模式，保护级别最高。', 'info');
+            } else {
+                // 关闭红外
+                previewImg.classList.remove('thermal-filter');
+                blurToggle.disabled = false;
+                if (blurToggle.checked) blurLayer.classList.remove('hidden');
+                
+                // 二次确认 (模拟)
+                document.getElementById('danger-msg').textContent = '关闭红外模式将向外部传输实景画面，可能增加隐私泄露风险。';
+                openModal('dangerModal');
+            }
+            updatePrivacyStatus();
+        }
+
+        function toggleBlur() {
+            if (blurToggle.checked) {
+                blurLayer.classList.remove('hidden');
+            } else {
+                blurLayer.classList.add('hidden');
+                document.getElementById('danger-msg').textContent = '关闭 AI 实时打码将直接暴露儿童面部特征。';
+                openModal('dangerModal');
+            }
+            updatePrivacyStatus();
+        }
+        
+        function cancelDangerAction() {
+            closeModal('dangerModal');
+            // 恢复之前状态的简易逻辑
+            if(document.getElementById('danger-msg').textContent.includes('红外')) thermalToggle.checked = true;
+            if(document.getElementById('danger-msg').textContent.includes('打码')) blurToggle.checked = true;
+            updatePrivacyStatus();
+            if(blurToggle.checked) blurLayer.classList.remove('hidden');
+            if(thermalToggle.checked) previewImg.classList.add('thermal-filter');
+        }
+
+        // --- B. 生命周期滑块 ---
+        let lastSliderValue = 180;
+        function handleSliderChange(el) {
+            document.getElementById('retention-val').textContent = el.value + ' 天';
+            if (el.value < 180 && lastSliderValue >= 180) {
+                document.getElementById('danger-msg').textContent = `您设置的报警固化周期（${el.value}天）低于法规建议的 180 天。数据超期将被粉碎。`;
+                openModal('dangerModal');
+            }
+            lastSliderValue = el.value;
+        }
+
+        // --- C. 审批流交互 ---
+        let currentRejectId = null;
+
+        function approve(id) {
+            const row = document.getElementById(id);
+            row.style.opacity = '0.5';
+            row.style.pointerEvents = 'none';
+            row.querySelector('td:last-child').innerHTML = '<span class="text-successGreen text-xs font-bold flex items-center justify-end"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> WebSocket 已下发放行</span>';
+            showToast('已同意申请，权限即刻生效。', 'success');
+        }
+
+        function openRejectModal(id, name) {
+            currentRejectId = id;
+            document.getElementById('reject-user-name').textContent = name;
+            document.getElementById('reject-reason').value = '';
+            openModal('rejectModal');
+        }
+
+        function confirmReject() {
+            const reason = document.getElementById('reject-reason').value.trim();
+            if(!reason) { alert('必须填写回绝理由'); return; }
+            
+            const row = document.getElementById(currentRejectId);
+            row.style.opacity = '0.4';
+            row.style.pointerEvents = 'none';
+            row.querySelector('td:last-child').innerHTML = '<span class="text-gray-400 text-xs font-bold">已回绝并推送理由</span>';
+            
+            closeModal('rejectModal');
+            showToast('已拦截该权限申请。', 'info');
+        }
+
+        // --- 抽屉与模态框管控 ---
+        const drawer = document.getElementById('historyDrawer');
+        const backdrop = document.getElementById('drawerBackdrop');
+
+        function openDrawer(userId) {
+            drawer.classList.add('drawer-open');
+            backdrop.classList.add('modal-open');
+        }
+
+        function closeDrawer() {
+            drawer.classList.remove('drawer-open');
+            backdrop.classList.remove('modal-open');
+        }
+
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            const content = modal.querySelector('div.bg-white');
+            modal.classList.add('modal-open');
+            setTimeout(() => content.classList.add('modal-content-open'), 10);
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            const content = modal.querySelector('div.bg-white');
+            content.classList.remove('modal-content-open');
+            setTimeout(() => modal.classList.remove('modal-open'), 300);
+        }
+
+        // --- 物理防拆联动逻辑 (Lockdown) ---
+        function triggerLockdown() {
+            document.getElementById('lockdown-banner').classList.remove('hidden');
+            document.getElementById('main-workspace').classList.add('lockdown-mode');
+            document.getElementById('global-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-dangerRed mr-2 animate-ping"></span> 核心防御已介入';
+            document.getElementById('global-status').className = 'bg-red-50 text-dangerRed border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center shadow-sm';
+            
+            // 强制开启最强脱敏
+            thermalToggle.checked = true;
+            toggleThermal();
+            
+            showToast('🚨 接收到防拆信号，全网已阻断外部查看权限！', 'danger');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function releaseLockdown() {
+            document.getElementById('lockdown-banner').classList.add('hidden');
+            document.getElementById('main-workspace').classList.remove('lockdown-mode');
+            document.getElementById('global-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-successGreen mr-2 animate-pulse"></span> 系统安全运行中';
+            document.getElementById('global-status').className = 'bg-successGreen/10 text-successGreen border border-successGreen/20 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center shadow-sm';
+            showToast('已手动解除防拆锁定。', 'success');
+        }
+
+        // --- Toast 提示 ---
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast');
+            const bg = type === 'success' ? 'bg-successGreen' : (type === 'danger' ? 'bg-dangerRed' : 'bg-gray-800');
+            const toast = document.createElement('div');
+            toast.className = `${bg} text-white px-6 py-3 rounded-full shadow-2xl text-sm font-medium flex items-center transform transition-all duration-300 translate-y-[-20px] opacity-0`;
+            toast.innerHTML = msg;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('translate-y-[-20px]', 'opacity-0'));
+            setTimeout(() => {
+                toast.classList.add('translate-y-[-20px]', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // 初始化
+        if (blurToggle.checked) blurLayer.classList.remove('hidden');
+    </script>
+</body>
+</html>

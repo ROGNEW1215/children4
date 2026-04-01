@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>守护引擎 - 设备与节点状态</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        techBlue: '#2563EB',
+                        successGreen: '#10B981',
+                        dangerRed: '#EF4444',
+                        warningOrange: '#F59E0B',
+                        bgLight: '#f5f7fa'
+                    },
+                    boxShadow: {
+                        'float': '0 8px 30px rgba(0,0,0,0.04)',
+                        'red-glow': '0 0 15px rgba(239, 68, 68, 0.5)',
+                    },
+                    animation: {
+                        'breathe-red': 'breathe 2s ease-in-out infinite',
+                        'spin-slow': 'spin 3s linear infinite',
+                    },
+                    keyframes: {
+                        breathe: {
+                            '0%, 100%': { boxShadow: '0 0 10px rgba(239,68,68,0.3)', borderColor: '#ef4444' },
+                            '50%': { boxShadow: '0 0 25px rgba(239,68,68,0.8)', borderColor: '#b91c1c' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 滚动条与基础样式 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* 拓扑图 SVG 连线层 */
+        .svg-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+        .node-card { position: relative; z-index: 10; }
+        
+        /* 抽屉与模态框动画 */
+        .drawer-open { transform: translateX(0) !important; }
+        .modal-open { opacity: 1 !important; pointer-events: auto !important; }
+        .modal-content-open { transform: scale(1) translateY(0) !important; opacity: 1 !important; }
+    </style>
+</head>
+<body class="bg-bgLight text-gray-800 h-screen flex flex-col overflow-hidden font-sans">
+
+    <header class="h-16 bg-white shadow-sm flex items-center px-6 shrink-0 z-20 relative">
+        <div class="w-8 h-8 bg-techBlue rounded-lg flex items-center justify-center mr-3 shadow-md">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+        </div>
+        <div>
+            <h1 class="font-bold text-lg text-gray-800 leading-tight">设备与节点状态</h1>
+            <p class="text-[10px] text-gray-500 font-mono">NET-TOPOLOGY & EDGE-AI CONTROL</p>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-6 relative">
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <div class="bg-white rounded-xl p-5 shadow-float border border-gray-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium mb-1">物理接入设备总数</p>
+                    <h3 class="text-3xl font-bold text-gray-800">128</h3>
+                </div>
+                <div class="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center">
+                    <svg class="w-6 h-6 text-techBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m14-6h2m-2 6h2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl p-5 shadow-float border border-gray-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium mb-1">全网设备在线率</p>
+                    <div class="flex items-baseline">
+                        <h3 class="text-3xl font-bold text-gray-800">96.8</h3>
+                        <span class="text-sm text-gray-500 ml-1">%</span>
+                    </div>
+                    <p class="text-[10px] text-successGreen mt-1">124 / 128 在线</p>
+                </div>
+                <div class="relative w-14 h-14">
+                    <svg class="w-full h-full" viewBox="0 0 36 36">
+                        <path class="text-gray-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3.5" />
+                        <path class="text-successGreen" stroke-dasharray="96.8, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" />
+                    </svg>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl p-5 shadow-float border border-gray-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium mb-1">高危物理防拆告警</p>
+                    <div class="flex items-center">
+                        <h3 class="text-3xl font-bold text-dangerRed animate-pulse">1</h3>
+                        <span class="ml-2 text-[10px] bg-red-100 text-dangerRed px-2 py-0.5 rounded font-bold border border-red-200">阻断已触发</span>
+                    </div>
+                </div>
+                <div class="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                    <svg class="w-6 h-6 text-dangerRed" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl p-5 shadow-float border border-gray-100 flex items-center justify-between">
+                <div class="w-full">
+                    <p class="text-xs text-gray-500 font-medium mb-2 flex justify-between">边缘 AI 算力负载 <span class="text-techBlue">YOLOv11-Pose</span></p>
+                    <div class="space-y-2">
+                        <div>
+                            <div class="flex justify-between text-[10px] mb-1"><span class="text-gray-600">CPU (NPU)</span><span class="font-mono text-gray-800">68%</span></div>
+                            <div class="w-full bg-gray-100 rounded-full h-1.5"><div class="bg-techBlue h-1.5 rounded-full" style="width: 68%"></div></div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[10px] mb-1"><span class="text-gray-600">GPU Mem</span><span class="font-mono text-gray-800">82%</span></div>
+                            <div class="w-full bg-gray-100 rounded-full h-1.5"><div class="bg-warningOrange h-1.5 rounded-full" style="width: 82%"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-6 flex flex-wrap gap-4 items-center justify-between">
+            
+            <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                <div class="flex bg-gray-100 p-1 rounded-lg">
+                    <button onclick="switchView('topology')" id="tab-topology" class="px-4 py-1.5 text-sm font-bold rounded-md bg-white shadow-sm text-techBlue transition flex items-center">
+                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg> 拓扑视图
+                    </button>
+                    <button onclick="switchView('list')" id="tab-list" class="px-4 py-1.5 text-sm font-medium rounded-md text-gray-500 hover:text-gray-800 transition flex items-center">
+                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg> 列表视图
+                    </button>
+                </div>
+
+                <div class="h-6 w-px bg-gray-200 hidden md:block"></div>
+
+                <div class="relative">
+                    <svg class="w-4 h-4 absolute left-3 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    <input type="text" placeholder="IP / MAC / 别名..." class="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 outline-none w-48">
+                </div>
+                
+                <select class="text-sm border border-gray-200 rounded-lg py-2 px-3 outline-none text-gray-600 bg-gray-50 cursor-pointer hidden sm:block">
+                    <option>全部设备类型</option>
+                    <option>AI 边缘计算盒</option>
+                    <option>PoE 交换机</option>
+                    <option>IPC 摄像头</option>
+                </select>
+            </div>
+
+            <div class="flex items-center gap-2 w-full lg:w-auto justify-end">
+                <button onclick="openModal('onvifModal')" class="bg-techBlue hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-md shadow-blue-500/30 transition flex items-center">
+                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg> 录入新设备
+                </button>
+                <button onclick="openModal('rebootModal')" class="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg transition flex items-center">
+                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> 批量重启
+                </button>
+            </div>
+        </div>
+
+        <div id="view-topology" class="bg-white rounded-xl shadow-sm border border-gray-100 p-8 min-h-[500px] relative overflow-hidden block">
+            <h3 class="text-sm font-bold text-gray-800 mb-6 absolute top-4 left-6 z-20">逻辑物理架构图 <span class="text-xs text-gray-400 font-normal ml-2">支持滚轮缩放及拖拽排障</span></h3>
+            
+            <svg class="svg-layer">
+                <path d="M 120 250 L 250 250" stroke="#2563EB" stroke-width="2" fill="none" stroke-dasharray="4,4" class="animate-[dash_1s_linear_infinite]" />
+                <path d="M 350 250 L 500 150" stroke="#2563EB" stroke-width="2" fill="none" />
+                <path d="M 350 250 L 500 350" stroke="#2563EB" stroke-width="2" fill="none" />
+                <path d="M 600 350 L 750 250" stroke="#10B981" stroke-width="2" fill="none" />
+                <path d="M 600 350 L 750 350" stroke="#EF4444" stroke-width="2" fill="none" stroke-dasharray="6,4" />
+                <path d="M 600 350 L 750 450" stroke="#9CA3AF" stroke-width="2" fill="none" stroke-dasharray="2,4" />
+            </svg>
+
+            <div class="relative w-full h-[400px] mt-10">
+                
+                <div class="node-card absolute left-[20px] top-[210px] w-[100px] text-center cursor-pointer group" onclick="openDrawer('rt01')">
+                    <div class="w-14 h-14 mx-auto bg-gray-800 rounded-xl flex items-center justify-center shadow-lg group-hover:-translate-y-1 transition border border-gray-600">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path></svg>
+                    </div>
+                    <p class="text-[11px] font-bold text-gray-800 mt-2">核心网关</p>
+                    <p class="text-[9px] text-gray-500 font-mono">192.168.1.1</p>
+                </div>
+
+                <div class="node-card absolute left-[250px] top-[210px] w-[100px] text-center cursor-pointer group" onclick="openDrawer('sw01')">
+                    <div class="w-14 h-14 mx-auto bg-gray-100 rounded-xl flex items-center justify-center shadow-lg group-hover:-translate-y-1 transition border-2 border-techBlue relative">
+                        <span class="absolute -top-1 -right-1 w-3 h-3 bg-successGreen border-2 border-white rounded-full"></span>
+                        <svg class="w-6 h-6 text-techBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <p class="text-[11px] font-bold text-gray-800 mt-2">核心交换机</p>
+                    <p class="text-[9px] text-gray-500 font-mono">192.168.1.2</p>
+                </div>
+
+                <div class="node-card absolute left-[500px] top-[110px] w-[120px] text-center cursor-pointer group" onclick="openDrawer('ai01')">
+                    <div class="w-16 h-16 mx-auto bg-blue-50 rounded-xl flex items-center justify-center shadow-[0_5px_15px_rgba(37,99,235,0.2)] group-hover:-translate-y-1 transition border border-blue-200 relative">
+                        <span class="absolute -top-1 -right-1 w-3 h-3 bg-successGreen border-2 border-white rounded-full"></span>
+                        <svg class="w-8 h-8 text-techBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
+                    </div>
+                    <p class="text-[11px] font-bold text-gray-800 mt-2 bg-blue-100 text-techBlue rounded px-1 inline-block">YOLOv11-Edge</p>
+                    <p class="text-[9px] text-gray-500 font-mono block mt-1">负载正常 (68%)</p>
+                </div>
+
+                <div class="node-card absolute left-[500px] top-[310px] w-[100px] text-center cursor-pointer group" onclick="openDrawer('poe01')">
+                    <div class="w-14 h-14 mx-auto bg-gray-50 rounded-xl flex items-center justify-center shadow-lg group-hover:-translate-y-1 transition border border-gray-200 relative">
+                        <span class="absolute -top-1 -right-1 w-3 h-3 bg-successGreen border-2 border-white rounded-full"></span>
+                        <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    </div>
+                    <p class="text-[11px] font-bold text-gray-800 mt-2">PoE 交换机 (西区)</p>
+                    <p class="text-[9px] text-gray-500 font-mono">192.168.2.1</p>
+                </div>
+
+                <div class="node-card absolute left-[750px] top-[210px] w-[120px] text-left flex items-center bg-white p-2 border border-gray-100 rounded-lg shadow-sm cursor-pointer hover:border-successGreen transition" onclick="openDrawer('cam01')">
+                    <div class="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center mr-2 shrink-0">
+                        <svg class="w-4 h-4 text-successGreen" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-gray-800 leading-tight">大二班-主摄</p>
+                        <p class="text-[9px] text-successGreen">在线 · 推流中</p>
+                    </div>
+                </div>
+
+                <div class="node-card absolute left-[750px] top-[310px] w-[120px] text-left flex items-center bg-white p-2 border-2 border-dangerRed rounded-lg shadow-red-glow animate-breathe-red cursor-pointer" onclick="openDrawer('cam02')">
+                    <div class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center mr-2 shrink-0">
+                        <svg class="w-4 h-4 text-dangerRed animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-gray-800 leading-tight">午睡区-防盲</p>
+                        <p class="text-[9px] text-dangerRed font-bold">物理防拆告警</p>
+                    </div>
+                </div>
+
+                <div class="node-card absolute left-[750px] top-[410px] w-[120px] text-left flex items-center bg-gray-50 p-2 border border-gray-200 rounded-lg opacity-60 cursor-pointer" onclick="openDrawer('cam03')">
+                    <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-2 shrink-0">
+                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414"></path></svg>
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-gray-500 leading-tight">走廊盲区</p>
+                        <p class="text-[9px] text-gray-400">设备离线 (超时)</p>
+                    </div>
+                </div>
+
+            </div>
+            
+            <style>
+                @keyframes dash { to { stroke-dashoffset: -8; } }
+            </style>
+        </div>
+
+        <div id="view-list" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hidden">
+            <table class="w-full text-left text-sm text-gray-600">
+                <thead class="bg-gray-50 text-gray-500 text-xs border-b border-gray-100">
+                    <tr>
+                        <th class="px-6 py-4 font-medium">设备名称 / SN</th>
+                        <th class="px-6 py-4 font-medium">网络信息 (IP/MAC)</th>
+                        <th class="px-6 py-4 font-medium">AI 绑定状态</th>
+                        <th class="px-6 py-4 font-medium">运行状态</th>
+                        <th class="px-6 py-4 font-medium text-right">操作</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <tr class="hover:bg-blue-50/50 transition">
+                        <td class="px-6 py-4 flex items-center">
+                            <div class="w-8 h-8 bg-blue-50 text-techBlue rounded flex items-center justify-center mr-3"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></div>
+                            <div>
+                                <p class="font-bold text-gray-800">大二班-主摄</p>
+                                <p class="text-[10px] text-gray-400 font-mono">SN: CAM-A2-9981</p>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 font-mono text-xs text-gray-500">
+                            <div>192.168.2.105 (静态)</div>
+                            <div class="text-[10px] text-gray-400">A8:5E:45:C2:11:0A</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="bg-blue-100 text-techBlue text-[10px] px-2 py-0.5 rounded font-medium">已绑定: YOLOv11-Edge</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center text-successGreen text-xs font-medium"><span class="w-1.5 h-1.5 bg-successGreen rounded-full mr-1.5"></span>在线</span>
+                        </td>
+                        <td class="px-6 py-4 text-right space-x-2">
+                            <button class="text-techBlue hover:text-blue-800 text-xs font-medium">详情</button>
+                            <button class="text-gray-400 hover:text-gray-800 text-xs font-medium" onclick="openModal('rebootModal')">重启</button>
+                        </td>
+                    </tr>
+                    
+                    <tr class="bg-red-50/30 border-l-4 border-l-dangerRed">
+                        <td class="px-6 py-4 flex items-center">
+                            <div class="w-8 h-8 bg-red-100 text-dangerRed rounded flex items-center justify-center mr-3 shadow-[0_0_10px_rgba(239,68,68,0.3)] animate-pulse"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg></div>
+                            <div>
+                                <p class="font-bold text-gray-800">午睡区-防盲</p>
+                                <p class="text-[10px] text-gray-400 font-mono">SN: CAM-S1-4432</p>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 font-mono text-xs text-gray-500">
+                            <div>192.168.2.106 (DHCP)</div>
+                            <div class="text-[10px] text-gray-400">A8:5E:45:B1:00:FF</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="bg-blue-100 text-techBlue text-[10px] px-2 py-0.5 rounded font-medium">已绑定: YOLOv11-Edge</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center text-dangerRed text-xs font-bold"><span class="w-1.5 h-1.5 bg-dangerRed rounded-full mr-1.5 animate-ping"></span>防拆告警</span>
+                        </td>
+                        <td class="px-6 py-4 text-right space-x-2">
+                            <button class="text-dangerRed hover:text-red-800 text-xs font-medium">锁定截流</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </main>
+
+    <div id="drawerBackdrop" onclick="closeDrawer()" class="fixed inset-0 bg-gray-900/20 backdrop-blur-[2px] z-40 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+    <div id="deviceDrawer" class="fixed inset-y-0 right-0 w-80 bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50 flex flex-col border-l border-gray-100">
+        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+            <h2 class="text-base font-bold text-gray-800 flex items-center">
+                <svg class="w-4 h-4 mr-2 text-techBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                设备基档详情
+            </h2>
+            <button onclick="closeDrawer()" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="p-5 space-y-4 flex-1 overflow-y-auto text-sm">
+            <div>
+                <p class="text-xs text-gray-400 mb-1">设备名称</p>
+                <p class="font-bold text-gray-800" id="drawer-name">午睡区-防盲 (IPC)</p>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div><p class="text-xs text-gray-400 mb-1">IP 地址</p><p class="font-mono text-gray-700">192.168.2.106</p></div>
+                <div><p class="text-xs text-gray-400 mb-1">MAC 地址</p><p class="font-mono text-gray-700">A8:5E:45:B1:00:FF</p></div>
+            </div>
+            <div class="border-t border-gray-100 pt-4">
+                <p class="text-xs text-gray-400 mb-2">实时网络吞吐</p>
+                <div class="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-100 font-mono text-xs">
+                    <span class="text-successGreen">▲ 2.4 Mbps (上行)</span>
+                    <span class="text-techBlue">▼ 120 Kbps (下行)</span>
+                </div>
+            </div>
+            <div class="border-t border-gray-100 pt-4">
+                <p class="text-xs text-gray-400 mb-2">安全与策略</p>
+                <div class="bg-red-50 text-dangerRed p-3 rounded-lg border border-red-100 text-xs leading-relaxed">
+                    <strong class="block mb-1">⚠️ 防拆联动触发记录</strong>
+                    2026-03-29 14:22:10 触发内置三轴加速度计阈值。系统已强制将前 1 分钟加密缓存推送至 AI 计算节点并锁定。
+                </div>
+            </div>
+        </div>
+        <div class="p-4 border-t border-gray-100 flex gap-2">
+            <button class="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50 transition text-sm">网络重置</button>
+            <button class="flex-1 bg-techBlue text-white py-2 rounded-lg hover:bg-blue-700 transition text-sm">配置推流</button>
+        </div>
+    </div>
+
+    <div id="rebootModal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm transform scale-95 translate-y-4 transition-all duration-300 p-6">
+            <div class="w-12 h-12 bg-red-100 text-dangerRed rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h3 class="text-center text-lg font-bold text-gray-800 mb-2">确认执行远程重启？</h3>
+            <p class="text-center text-xs text-gray-500 mb-6">强制重启边缘节点或核心路由可能导致短暂的监控画面中断。为防止误操作，请输入管理员密码进行二次确认。</p>
+            <input type="password" placeholder="请输入系统密码" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-techBlue outline-none mb-4">
+            <div class="flex gap-3">
+                <button onclick="closeModal('rebootModal')" class="flex-1 bg-gray-100 text-gray-600 py-2 rounded-lg font-medium hover:bg-gray-200 transition text-sm">取消</button>
+                <button onclick="closeModal('rebootModal')" class="flex-1 bg-dangerRed text-white py-2 rounded-lg font-medium hover:bg-red-700 transition shadow-lg shadow-red-500/30 text-sm">确认重启</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="onvifModal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg transform scale-95 translate-y-4 transition-all duration-300 flex flex-col max-h-[80vh]">
+            <div class="p-5 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="font-bold text-gray-800 flex items-center">局域网自动发现 (ONVIF/UPnP)</h3>
+                <button onclick="closeModal('onvifModal')" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-5 bg-blue-50/50 flex items-center justify-center border-b border-gray-100">
+                <svg class="w-5 h-5 text-techBlue animate-spin-slow mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                <span class="text-sm text-techBlue font-medium">正在广播扫描内网未接管设备...</span>
+            </div>
+            <div class="flex-1 overflow-y-auto p-2">
+                <label class="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer border-b border-gray-50">
+                    <input type="checkbox" class="w-4 h-4 text-techBlue rounded border-gray-300 focus:ring-techBlue" checked>
+                    <div class="ml-3 flex-1">
+                        <p class="text-sm font-bold text-gray-800">Hikvision IPC (未知区域)</p>
+                        <p class="text-xs text-gray-500 font-mono">192.168.2.199 | ONVIF Proflie S</p>
+                    </div>
+                    <span class="text-[10px] bg-green-100 text-successGreen px-2 py-0.5 rounded">支持接入</span>
+                </label>
+                <label class="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
+                    <input type="checkbox" class="w-4 h-4 text-techBlue rounded border-gray-300 focus:ring-techBlue">
+                    <div class="ml-3 flex-1">
+                        <p class="text-sm font-bold text-gray-800">Dahua NVR (本地录像机)</p>
+                        <p class="text-xs text-gray-500 font-mono">192.168.2.200 | RTSP 开放</p>
+                    </div>
+                    <span class="text-[10px] bg-green-100 text-successGreen px-2 py-0.5 rounded">支持接入</span>
+                </label>
+            </div>
+            <div class="p-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex justify-end">
+                <button class="bg-techBlue text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 shadow-md">一键批量拉流 (1)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. 视图切换逻辑
+        function switchView(view) {
+            const topTab = document.getElementById('tab-topology');
+            const listTab = document.getElementById('tab-list');
+            const topView = document.getElementById('view-topology');
+            const listView = document.getElementById('view-list');
+
+            if (view === 'topology') {
+                topTab.className = "px-4 py-1.5 text-sm font-bold rounded-md bg-white shadow-sm text-techBlue transition flex items-center";
+                listTab.className = "px-4 py-1.5 text-sm font-medium rounded-md text-gray-500 hover:text-gray-800 transition flex items-center";
+                topView.classList.remove('hidden');
+                listView.classList.add('hidden');
+            } else {
+                listTab.className = "px-4 py-1.5 text-sm font-bold rounded-md bg-white shadow-sm text-techBlue transition flex items-center";
+                topTab.className = "px-4 py-1.5 text-sm font-medium rounded-md text-gray-500 hover:text-gray-800 transition flex items-center";
+                listView.classList.remove('hidden');
+                topView.classList.add('hidden');
+            }
+        }
+
+        // 2. 抽屉交互控制
+        const drawer = document.getElementById('deviceDrawer');
+        const backdrop = document.getElementById('drawerBackdrop');
+
+        function openDrawer(nodeId) {
+            // 简单模拟根据 nodeId 填充信息
+            const nameEl = document.getElementById('drawer-name');
+            if(nodeId === 'cam02') {
+                nameEl.innerHTML = '午睡区-防盲 (IPC) <span class="ml-2 text-[10px] bg-red-100 text-dangerRed px-1.5 py-0.5 rounded border border-red-200">告警源</span>';
+            } else if (nodeId === 'rt01') {
+                nameEl.textContent = '核心网关 (Router)';
+            } else if (nodeId === 'ai01') {
+                nameEl.textContent = '边缘计算节点 (YOLOv11)';
+            } else {
+                nameEl.textContent = '网络接入点 (正常)';
+            }
+
+            drawer.classList.add('drawer-open');
+            backdrop.classList.add('modal-open');
+        }
+
+        function closeDrawer() {
+            drawer.classList.remove('drawer-open');
+            backdrop.classList.remove('modal-open');
+        }
+
+        // 3. 模态框交互控制
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            const content = modal.querySelector('div.bg-white');
+            modal.classList.add('modal-open');
+            setTimeout(() => {
+                content.classList.add('modal-content-open');
+            }, 10);
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            const content = modal.querySelector('div.bg-white');
+            content.classList.remove('modal-content-open');
+            setTimeout(() => {
+                modal.classList.remove('modal-open');
+            }, 300); // 配合 CSS duration-300
+        }
+    </script>
+</body>
+</html>
