@@ -1,4 +1,5 @@
 @import "tailwindcss";
+/* Convention: prefer template utility classes in Vue SFCs; avoid scoped @apply for new pages. */
 
 :root {
   --text: #6b6375;
@@ -56,14 +57,14 @@ body {
   margin: 0;
 }
 
-h1,
-h2 {
+#center h1,
+#center h2 {
   font-family: var(--heading);
   font-weight: 500;
   color: var(--text-h);
 }
 
-h1 {
+#center h1 {
   font-size: 56px;
   letter-spacing: -1.68px;
   margin: 32px 0;
@@ -72,7 +73,7 @@ h1 {
     margin: 20px 0;
   }
 }
-h2 {
+#center h2 {
   font-size: 24px;
   line-height: 118%;
   letter-spacing: -0.24px;
