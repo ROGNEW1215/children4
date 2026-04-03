@@ -23,6 +23,12 @@ export interface DeviceRecord {
   firmware: string
   upRate: string
   downRate: string
+  /** Present when `type === 'ipc'` — deployed pose/behavior checkpoint name. */
+  aiModelVersion?: string
+  /** Whether analytics pipeline is armed for this channel (policy may still gate on schedule). */
+  isAiEnabled?: boolean
+  /** Edge worker / TPU slot that runs decode + inference for this stream. */
+  computeNode?: string
 }
 
 export interface TopologyNode {
@@ -120,6 +126,9 @@ const devices: DeviceRecord[] = [
     firmware: 'v5.4.2',
     upRate: '2.4 Mbps',
     downRate: '120 Kbps',
+    aiModelVersion: 'YOLOv8-Nano',
+    isAiEnabled: true,
+    computeNode: 'Edge-TPU-01',
   },
   {
     id: 'cam-02',
@@ -134,6 +143,9 @@ const devices: DeviceRecord[] = [
     firmware: 'v5.4.0',
     upRate: '2.1 Mbps',
     downRate: '90 Kbps',
+    aiModelVersion: 'YOLOv8-Nano',
+    isAiEnabled: true,
+    computeNode: 'Edge-TPU-01',
   },
   {
     id: 'cam-03',
@@ -148,6 +160,9 @@ const devices: DeviceRecord[] = [
     firmware: 'v5.1.6',
     upRate: '0 Kbps',
     downRate: '0 Kbps',
+    aiModelVersion: 'YOLOv8-Nano',
+    isAiEnabled: false,
+    computeNode: 'Edge-TPU-01',
   },
 ]
 

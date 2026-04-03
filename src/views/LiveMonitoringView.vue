@@ -26,6 +26,8 @@ interface StreamEvent {
   image: string
 }
 
+const demoStreamSrc = '/yolo-demo.mp4'
+
 const deviceGroups = [
   { key: 'classA', label: '大一班' },
   { key: 'public', label: '公共区域' },
@@ -99,7 +101,6 @@ const eventSeed: StreamEvent[] = [
 
 const events = ref<StreamEvent[]>([...eventSeed])
 const gridMode = ref<1 | 2 | 3>(2)
-const aiOverlayOn = ref(true)
 const isMuted = ref(true)
 const activeCameraId = ref('cam-2')
 const zoomedCameraId = ref<string | null>(null)
@@ -160,10 +161,6 @@ function focusCamera(cameraId: string, eventId?: string) {
     setGrid(1)
   }
   highlightedEventId.value = eventId ?? null
-}
-
-function toggleAiOverlay() {
-  aiOverlayOn.value = !aiOverlayOn.value
 }
 
 function toggleMute() {
@@ -270,20 +267,14 @@ onBeforeUnmount(() => {
               <span class="truncate text-xs font-semibold text-white">{{ camera.name }}</span>
               <span class="font-mono text-[11px] text-emerald-300">FPS {{ camera.fps }} | {{ camera.latency }}ms</span>
             </div>
-            <img :src="camera.image" :alt="camera.name" class="h-full w-full object-cover" />
-            <div v-if="aiOverlayOn" class="pointer-events-none absolute inset-0">
-              <div class="bbox-ok" />
-              <div class="bbox-danger" />
-              <svg class="skeleton" viewBox="0 0 100 100" aria-hidden="true">
-                <line x1="50" y1="20" x2="50" y2="50" />
-                <line x1="50" y1="32" x2="30" y2="46" />
-                <line x1="50" y1="32" x2="70" y2="46" />
-                <circle cx="50" cy="15" r="4" />
-              </svg>
-              <div class="absolute bottom-2 right-3 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                电源禁区
-              </div>
-            </div>
+            <video
+              class="block h-full w-full object-cover"
+              :src="demoStreamSrc"
+              autoplay
+              loop
+              playsinline
+              :muted="isMuted"
+            />
           </article>
         </div>
         <footer class="flex items-center justify-between border-t border-slate-100 px-3 py-2">
@@ -311,13 +302,6 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <div class="flex items-center gap-2">
-            <button
-              type="button"
-              class="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
-              @click="toggleAiOverlay"
-            >
-              {{ aiOverlayOn ? 'AI增强开' : 'AI增强关' }}
-            </button>
             <button
               type="button"
               class="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
@@ -397,7 +381,14 @@ onBeforeUnmount(() => {
           <span class="truncate text-xs font-semibold text-white">{{ activeCamera.name }}</span>
           <span class="font-mono text-[11px] text-emerald-300">FPS {{ activeCamera.fps }} | {{ activeCamera.latency }}ms</span>
         </div>
-        <img :src="activeCamera.image" :alt="activeCamera.name" class="h-full w-full object-cover" />
+        <video
+          class="block h-full w-full object-cover"
+          :src="demoStreamSrc"
+          autoplay
+          loop
+          playsinline
+          :muted="isMuted"
+        />
       </article>
       <div class="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
         <div class="mb-2 flex gap-2">
@@ -449,7 +440,14 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="isPipMode" class="pip-mock">
-      <img :src="activeCamera.image" :alt="activeCamera.name" class="h-full w-full object-cover" />
+      <video
+        class="block h-full w-full object-cover"
+        :src="demoStreamSrc"
+        autoplay
+        loop
+        playsinline
+        :muted="isMuted"
+      />
       <button type="button" class="pip-close" @click="togglePip">关闭</button>
     </div>
 
@@ -474,37 +472,6 @@ onBeforeUnmount(() => {
 
 .cell-danger {
   animation: breathe-red 2s ease-in-out infinite;
-}
-
-.bbox-ok {
-  position: absolute;
-  top: 38%;
-  left: 24%;
-  width: 22%;
-  height: 42%;
-  border: 2px solid #10b981;
-  background: rgba(16, 185, 129, 0.12);
-}
-
-.bbox-danger {
-  position: absolute;
-  top: 30%;
-  left: 52%;
-  width: 24%;
-  height: 46%;
-  border: 2px solid #ef4444;
-  background: rgba(239, 68, 68, 0.16);
-}
-
-.skeleton {
-  position: absolute;
-  top: 28%;
-  left: 52%;
-  width: 24%;
-  height: 46%;
-  stroke: #22d3ee;
-  stroke-width: 2;
-  fill: #22d3ee;
 }
 
 .pip-mock {
