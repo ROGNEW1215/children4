@@ -31,6 +31,8 @@ const retentionDays = ref(180)
 const lastSafeRetentionDays = ref(180)
 const isLockdownMode = ref(false)
 
+const demoPreviewSrc = '/yolo-demo.mp4'
+
 const approvalRequests = ref<ApprovalRequest[]>([
   {
     id: 'req-1',
@@ -283,15 +285,19 @@ function releaseLockdown() {
         </div>
 
         <div class="relative mb-6 h-44 overflow-hidden rounded-xl border border-slate-200 bg-slate-900">
-          <img
-            src="https://images.unsplash.com/photo-1595123550441-d377e017ea6c?auto=format&fit=crop&w=1200&q=80"
-            alt="监控预览"
+          <video
+            :src="demoPreviewSrc"
             class="h-full w-full object-cover transition duration-500"
             :class="{ 'thermal-filter': thermalEnabled }"
+            muted
+            loop
+            playsinline
+            autoplay
           />
           <div v-if="blurEnabled && !thermalEnabled" class="absolute inset-0">
-            <div class="absolute left-[32%] top-[24%] h-16 w-16 rounded-full border border-white/20 bg-white/10 backdrop-blur-md" />
-            <div class="absolute right-[24%] top-[30%] h-12 w-12 rounded-full border border-white/20 bg-white/10 backdrop-blur-md" />
+            <div
+              class="absolute left-[46%] top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20 bg-white/10 backdrop-blur-md"
+            />
           </div>
           <div class="absolute bottom-2 right-2 rounded bg-black/45 px-2 py-1 text-[10px] text-white">
             边缘节点渲染预览

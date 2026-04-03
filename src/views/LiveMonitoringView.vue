@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
+import { useAuth } from '../composables/useAuth'
+import {
+  getDashboardDataset,
+  type YoloClassLabel,
+  type YoloDetection,
+  type YoloSeverity,
+} from '../data/dashboardDataset'
+import { RoleId, type RoleIdType } from '../services/auth'
 
 type DeviceStatus = 'online' | 'offline' | 'alert'
 type EventLevel = 'high' | 'warning' | 'info'
@@ -27,6 +35,48 @@ interface StreamEvent {
 }
 
 const demoStreamSrc = '/yolo-demo.mp4'
+
+const { roleId } = useAuth()
+
+function effectiveRole(): RoleIdType {
+  return roleId.value ?? RoleId.org
+}
+
+const dataset = computed(() => getDashboardDataset(effectiveRole()))
+const aiStats = computed(() => dataset.value.algorithmPerformance)
+const recentYoloAlerts = computed(() =>
+  [...dataset.value.yoloAlertHistory].slice(-3).reverse(),
+)
+
+const YOLO_CLASS_ZH: Record<YoloClassLabel, string> = {
+  climbing: '攀爬',
+  falling_down: '跌倒',
+  wandering_in_danger_zone: '危险区徘徊',
+  pushing_shoving: '推搡冲突',
+  running_unsafe: '快速奔跑',
+}
+
+const yoloTimeFmt = new Intl.DateTimeFormat('zh-CN', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+})
+
+function formatYoloTime(iso: string) {
+  return yoloTimeFmt.format(new Date(iso))
+}
+
+function yoloSeverityDotClass(sev: YoloSeverity) {
+  if (sev === 'critical') return 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.9)]'
+  if (sev === 'high') return 'bg-red-400'
+  if (sev === 'medium') return 'bg-amber-400'
+  return 'bg-cyan-400/90'
+}
+
+function yoloLabelZh(d: YoloDetection) {
+  return YOLO_CLASS_ZH[d.classLabel] ?? d.classLabel
+}
 
 const deviceGroups = [
   { key: 'classA', label: '大一班' },
@@ -265,7 +315,9 @@ onBeforeUnmount(() => {
           >
             <div class="absolute left-0 right-0 top-0 z-10 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent p-2">
               <span class="truncate text-xs font-semibold text-white">{{ camera.name }}</span>
-              <span class="font-mono text-[11px] text-emerald-300">FPS {{ camera.fps }} | {{ camera.latency }}ms</span>
+              <span class="font-mono text-[11px] text-emerald-300"
+                >FPS {{ aiStats.fps }} · {{ aiStats.latencyMs }}ms</span
+              >
             </div>
             <video
               class="block h-full w-full object-cover"
@@ -275,6 +327,48 @@ onBeforeUnmount(() => {
               playsinline
               :muted="isMuted"
             />
+            <div
+              v-if="camera.id === activeCameraId"
+              class="ai-hud pointer-events-none absolute bottom-2 right-2 z-20 max-w-[min(100%,14rem)] overflow-hidden rounded-md border border-cyan-500/30 bg-slate-950/60 px-2 py-1.5 text-[10px] text-cyan-50 shadow-[0_0_24px_rgba(6,182,212,0.12)] backdrop-blur-md"
+            >
+              <div
+                class="mb-1 flex items-center justify-between border-b border-cyan-500/25 pb-1 font-mono text-[9px] uppercase tracking-[0.12em] text-cyan-300/95"
+              >
+                <span>EDGE · YOLO</span>
+              </div>
+              <div class="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[10px] leading-tight">
+                <span class="text-cyan-400/75">FPS</span>
+                <span class="text-right tabular-nums text-slate-100">{{ aiStats.fps }}</span>
+                <span class="text-cyan-400/75">延迟</span>
+                <span class="text-right tabular-nums text-slate-100">{{ aiStats.latencyMs }}ms</span>
+                <span class="text-cyan-400/75">丢帧</span>
+                <span class="text-right tabular-nums text-slate-300"
+                  >{{ (aiStats.dropFrameRate * 100).toFixed(1) }}%</span
+                >
+                <span class="col-span-2 truncate font-mono text-[9px] text-slate-500">{{ aiStats.resolution }}</span>
+              </div>
+              <div class="mt-1.5 border-t border-cyan-500/20 pt-1">
+                <p class="mb-0.5 font-mono text-[9px] text-cyan-400/85">最近识别</p>
+                <ul class="space-y-1">
+                  <li
+                    v-for="row in recentYoloAlerts"
+                    :key="row.id"
+                    class="flex items-start gap-1.5 font-mono text-[9px] leading-snug"
+                  >
+                    <span
+                      class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                      :class="yoloSeverityDotClass(row.severity)"
+                    />
+                    <span class="min-w-0 flex-1 text-slate-100"
+                      >{{ yoloLabelZh(row) }}
+                      <span class="text-cyan-500/80">· {{ Math.round(row.confidence * 100) }}%</span></span
+                    >
+                    <span class="shrink-0 tabular-nums text-slate-500">{{ formatYoloTime(row.timestamp) }}</span>
+                  </li>
+                  <li v-if="recentYoloAlerts.length === 0" class="text-slate-500">暂无记录</li>
+                </ul>
+              </div>
+            </div>
           </article>
         </div>
         <footer class="flex items-center justify-between border-t border-slate-100 px-3 py-2">
@@ -379,7 +473,9 @@ onBeforeUnmount(() => {
       <article class="relative h-64 overflow-hidden rounded-lg border border-slate-200 bg-slate-900 shadow-sm">
         <div class="absolute left-0 right-0 top-0 z-10 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent p-2">
           <span class="truncate text-xs font-semibold text-white">{{ activeCamera.name }}</span>
-          <span class="font-mono text-[11px] text-emerald-300">FPS {{ activeCamera.fps }} | {{ activeCamera.latency }}ms</span>
+          <span class="font-mono text-[11px] text-emerald-300"
+            >FPS {{ aiStats.fps }} · {{ aiStats.latencyMs }}ms</span
+          >
         </div>
         <video
           class="block h-full w-full object-cover"
@@ -389,6 +485,47 @@ onBeforeUnmount(() => {
           playsinline
           :muted="isMuted"
         />
+        <div
+          class="ai-hud pointer-events-none absolute bottom-2 right-2 z-20 max-w-[min(100%,14rem)] overflow-hidden rounded-md border border-cyan-500/30 bg-slate-950/60 px-2 py-1.5 text-[10px] text-cyan-50 shadow-[0_0_24px_rgba(6,182,212,0.12)] backdrop-blur-md"
+        >
+          <div
+            class="mb-1 flex items-center justify-between border-b border-cyan-500/25 pb-1 font-mono text-[9px] uppercase tracking-[0.12em] text-cyan-300/95"
+          >
+            <span>EDGE · YOLO</span>
+          </div>
+          <div class="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[10px] leading-tight">
+            <span class="text-cyan-400/75">FPS</span>
+            <span class="text-right tabular-nums text-slate-100">{{ aiStats.fps }}</span>
+            <span class="text-cyan-400/75">延迟</span>
+            <span class="text-right tabular-nums text-slate-100">{{ aiStats.latencyMs }}ms</span>
+            <span class="text-cyan-400/75">丢帧</span>
+            <span class="text-right tabular-nums text-slate-300"
+              >{{ (aiStats.dropFrameRate * 100).toFixed(1) }}%</span
+            >
+            <span class="col-span-2 truncate font-mono text-[9px] text-slate-500">{{ aiStats.resolution }}</span>
+          </div>
+          <div class="mt-1.5 border-t border-cyan-500/20 pt-1">
+            <p class="mb-0.5 font-mono text-[9px] text-cyan-400/85">最近识别</p>
+            <ul class="space-y-1">
+              <li
+                v-for="row in recentYoloAlerts"
+                :key="`m-${row.id}`"
+                class="flex items-start gap-1.5 font-mono text-[9px] leading-snug"
+              >
+                <span
+                  class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                  :class="yoloSeverityDotClass(row.severity)"
+                />
+                <span class="min-w-0 flex-1 text-slate-100"
+                  >{{ yoloLabelZh(row) }}
+                  <span class="text-cyan-500/80">· {{ Math.round(row.confidence * 100) }}%</span></span
+                >
+                <span class="shrink-0 tabular-nums text-slate-500">{{ formatYoloTime(row.timestamp) }}</span>
+              </li>
+              <li v-if="recentYoloAlerts.length === 0" class="text-slate-500">暂无记录</li>
+            </ul>
+          </div>
+        </div>
       </article>
       <div class="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
         <div class="mb-2 flex gap-2">
@@ -448,6 +585,17 @@ onBeforeUnmount(() => {
         playsinline
         :muted="isMuted"
       />
+      <div
+        class="ai-hud pip-ai-hud pointer-events-none absolute bottom-1 left-1 right-8 z-10 overflow-hidden rounded border border-cyan-500/35 bg-slate-950/70 px-1 py-0.5 font-mono text-[7px] leading-tight text-cyan-100/95 backdrop-blur-sm"
+      >
+        <div class="flex justify-between gap-1 text-[6px] uppercase tracking-wide text-cyan-300/90">
+          <span>YOLO</span>
+          <span class="tabular-nums">{{ aiStats.fps }}fps</span>
+        </div>
+        <div class="truncate tabular-nums text-slate-300">
+          {{ aiStats.latencyMs }}ms · {{ recentYoloAlerts[0] ? yoloLabelZh(recentYoloAlerts[0]) : '—' }}
+        </div>
+      </div>
       <button type="button" class="pip-close" @click="togglePip">关闭</button>
     </div>
 
@@ -472,6 +620,10 @@ onBeforeUnmount(() => {
 
 .cell-danger {
   animation: breathe-red 2s ease-in-out infinite;
+}
+
+.ai-hud {
+  background-image: linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(15, 23, 42, 0.72) 100%);
 }
 
 .pip-mock {

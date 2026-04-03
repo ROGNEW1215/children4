@@ -69,14 +69,14 @@ export const cameraOptions: CameraOption[] = [
     id: 'cam-01',
     label: '大二班 - 主摄像头',
     frameUrl:
-      'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=1600&q=80',
+      'https://images.unsplash.com/photo-1694885146901-b1d05cb1f549?auto=format&fit=crop&w=1600&q=80',
     sourceSize: { width: 1920, height: 1080 },
   },
   {
     id: 'cam-02',
     label: '午睡区 - 盲区补充',
     frameUrl:
-      'https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1600&q=80',
+      'https://images.unsplash.com/photo-1567746455504-cb3213f8f5b8?auto=format&fit=crop&w=1600&q=80',
     sourceSize: { width: 1920, height: 1080 },
   },
 ]
@@ -88,10 +88,10 @@ export const initialZones: ZoneModel[] = [
     type: 'safe',
     hidden: false,
     points: [
-      { x: 90, y: 120 },
-      { x: 520, y: 120 },
-      { x: 520, y: 360 },
-      { x: 90, y: 360 },
+      { x: 95, y: 105 },
+      { x: 555, y: 105 },
+      { x: 555, y: 365 },
+      { x: 95, y: 365 },
     ],
     rule: {
       condition: 'leave',

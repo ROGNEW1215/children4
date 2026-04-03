@@ -58,7 +58,7 @@ const events = ref<AlertEvent[]>([
     aiResult: '异常跌倒',
     confidence: 88,
     thumbnail:
-      'https://images.unsplash.com/photo-1605556209259-86927361a357?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1544776193-352d25ca82cd?auto=format&fit=crop&w=900&q=80',
     envTag: '地面湿滑概率较高',
     reviewNote: '已通知老师加强该区域看护。',
   },
